@@ -123,17 +123,26 @@ async function run() {
         else if (sort === 'price-high') sortOption = { price: -1 };
 
         // ৪. Pagination
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        // const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        const books = await manageCollection.find(query)
-            .sort(sortOption)
-            .skip(skip)
-            .limit(parseInt(limit))
-            .toArray();
+        // const books = await manageCollection.find(query)
+        //     .sort(sortOption)
+        //     .skip(skip)
+        //     .limit(parseInt(limit))
+        //     .toArray();
+        const pageInt = parseInt(page) || 1;
+const limitInt = parseInt(limit) || 8;
+const skip = (pageInt - 1) * limitInt;
+
+const books = await manageCollection.find(query)
+    .sort(sortOption)
+    .skip(skip)
+    .limit(limitInt)
+    .toArray();
 
         const total = await manageCollection.countDocuments(query);
 
-        res.send({ books, totalPages: Math.ceil(total / limit) });
+        res.send({ books, totalPages: Math.ceil(total / limitInt) });
     } catch (error) {
         res.status(500).send({ message: "Error fetching data" });
     }
