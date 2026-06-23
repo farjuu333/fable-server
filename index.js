@@ -62,6 +62,40 @@ async function run() {
     const db = client.db(process.env.AUTH_DB_NAME);
     const subscriptionsCollection = db.collection("subscriptions");
     const userCollection = db.collection("user");
+     const ebookCollection = db.collection("ebooks");
+     const manageCollection = db.collection("manage");
+
+     app.get('/api/manage',async(req,res)=>{
+        const query = {};
+         if (req.query.bookId) {
+        query.bookId = req.query.bookId;
+    }
+    if (req.query.status) {
+        query.status = req.query.status;
+    }
+     const cursor = manageCollection.find(query);
+    const result = await cursor.toArray();
+    res.send(result);
+
+     })
+
+     app.post("/api/manage",async(req,res)=>{
+        const manages = req.body;
+        const result = await manageCollection.insertOne(manages);
+        res.send(result);
+     })
+
+     app.get("/api/all-books", async (req, res) => {
+        try {
+            // manageCollection থেকে ডাটাগুলো খুঁজে বের করছে
+            const result = await manageCollection.find({}).toArray(); 
+            // ডাটাগুলো ফ্রন্টএন্ডে পাঠিয়ে দিচ্ছে
+            res.send(result); 
+        } catch (error) {
+            res.status(500).send({ message: "Error fetching books" });
+        }
+    });
+
 
     app.post("/subscription", async (req, res) => {
       const { sessionId, userId, priceId } = req.body;
@@ -86,6 +120,22 @@ async function run() {
       res.json({ msg: "Payment successfull!" });
     });
 
+
+
+     app.get("/ebooks", async (req, res) => {
+      const { search } = req.query;
+      const query = {};
+      if (search && search != "undefined") {
+        query.$or = [
+          { title: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+        ];
+      }
+
+      const result = await ebookCollection.find(query).toArray();
+
+      res.send(result);
+    });
 
  
 
