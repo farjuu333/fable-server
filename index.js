@@ -85,17 +85,59 @@ async function run() {
         res.send(result);
      })
 
-     app.get("/api/all-books", async (req, res) => {
-        try {
-            // manageCollection থেকে ডাটাগুলো খুঁজে বের করছে
-            const result = await manageCollection.find({}).toArray(); 
-            // ডাটাগুলো ফ্রন্টএন্ডে পাঠিয়ে দিচ্ছে
-            res.send(result); 
-        } catch (error) {
-            res.status(500).send({ message: "Error fetching books" });
-        }
-    });
+    //  app.get("/api/all-books", async (req, res) => {
+    //     try {
+            
+    //         const result = await manageCollection.find({}).toArray(); 
+    //         res.send(result); 
+    //     } catch (error) {
+    //         res.status(500).send({ message: "Error fetching books" });
+    //     }
+    // });
+    app.get("/api/all-books", async (req, res) => {
+    try {
+        const { search, genre, minPrice, maxPrice, status, sort, page = 1, limit = 8 } = req.query;
+        let query = {};
 
+        // ১. Search (Title & Writer Name)
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: "i" } },
+                { writerName: { $regex: search, $options: "i" } }
+            ];
+        }
+
+        // ২. Filters
+        if (genre) query.genre = genre;
+        if (status) query.status = status;
+        if (minPrice || maxPrice) {
+            query.price = {};
+            if (minPrice) query.price.$gte = parseFloat(minPrice);
+            if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+        }
+
+        // ৩. Sorting
+        let sortOption = {};
+        if (sort === 'newest') sortOption = { _id: -1 };
+        else if (sort === 'price-low') sortOption = { price: 1 };
+        else if (sort === 'price-high') sortOption = { price: -1 };
+
+        // ৪. Pagination
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const books = await manageCollection.find(query)
+            .sort(sortOption)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .toArray();
+
+        const total = await manageCollection.countDocuments(query);
+
+        res.send({ books, totalPages: Math.ceil(total / limit) });
+    } catch (error) {
+        res.status(500).send({ message: "Error fetching data" });
+    }
+});
 
     app.post("/subscription", async (req, res) => {
       const { sessionId, userId, priceId } = req.body;
