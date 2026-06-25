@@ -119,15 +119,15 @@ async function run() {
         else if (sort === 'price-high') sortOption = { price: -1 };
 
         
-const pageInt = parseInt(page) || 1;
-const limitInt = parseInt(limit) || 8;
-const skip = (pageInt - 1) * limitInt;
-const books = await manageCollection.find(query)
+        const pageInt = parseInt(page) || 1;
+        const limitInt = parseInt(limit) || 8;
+        const skip = (pageInt - 1) * limitInt;
+        const books = await manageCollection.find(query)
 
-    .sort(sortOption)
-    .skip(skip)
-    .limit(limitInt)
-    .toArray();
+            .sort(sortOption)
+            .skip(skip)
+            .limit(limitInt)
+            .toArray();
 
         const total = await manageCollection.countDocuments(query);
     res.send({ books, totalPages: Math.ceil(total / limitInt) });
@@ -167,28 +167,48 @@ app.get("/api/featured-books", async (req, res) => {
   }
 });
 
+// purchase book user update status user card 
 app.post("/subscription", async (req, res) => {
     const { sessionId, userId, bookId, priceId,status } = req.body;
     try {
         console.log(req.body)
         res.send({})
-        await subscriptionsCollection.insertOne({ sessionId,priceId, userId, bookId,status, date: new Date() });
-        
-        
+        await subscriptionsCollection.insertOne({ sessionId,priceId, userId,userEmail, bookId,status, date: new Date() });
         const result=await manageCollection.updateOne(
             { _id: new ObjectId(bookId) },
-            // { _id: bookId },
-            
-           
-            { $set: { status: "Sold" } }
+           { $set: { status: "Sold",userEmail: userEmail } }
         );
         console.log("Update result:", result);
-        
-        
         res.status(200).send({ success: true });
     } catch (error) {
         res.status(500).send({ error: "Failed to update" });
     }
+});
+
+
+
+// User's purchased ebooks (User History)
+app.get("/api/dashboard/user/purchases", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    const purchases = await subscriptionsCollection
+      .find({ userEmail: email }) 
+      .toArray();
+    const bookIds = purchases.map(p => new ObjectId(p.bookId));
+
+    const purchasedBooks = await manageCollection
+      .find({ _id: { $in: bookIds } })
+      .toArray();
+
+    res.json(purchasedBooks);
+  } catch (err) {
+    console.error("Error fetching purchases:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
       await client.db("admin").command({ ping: 1 });
