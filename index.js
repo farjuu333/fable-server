@@ -63,8 +63,11 @@ async function run() {
     const db = client.db(process.env.AUTH_DB_NAME);
     const subscriptionsCollection = db.collection("subscriptions");
     const userCollection = db.collection("user");
-     const ebookCollection = db.collection("ebooks");
-     const manageCollection = db.collection("manage");
+    const manageCollection = db.collection("manage");
+
+
+
+
 
      app.get('/api/manage',async(req,res)=>{
         const query = {};
@@ -79,20 +82,20 @@ async function run() {
     res.send(result);
 
      })
-
+    //  add a book in dashboard/writer/add 
      app.post("/api/manage",async(req,res)=>{
         const manages = req.body;
         const result = await manageCollection.insertOne(manages);
         res.send(result);
      })
 
-    
+    // get all books in browsebook router
     app.get("/api/all-books", async (req, res) => {
     try {
         const { search, genre, minPrice, maxPrice, status, sort, page = 1, limit = 8 } = req.query;
         let query = {};
 
-        // ১. Search (Title & Writer Name)
+        // . Search (Title & Writer Name)
         if (search) {
             query.$or = [
                 { title: { $regex: search, $options: "i" } },
@@ -100,7 +103,7 @@ async function run() {
             ];
         }
 
-        // ২. Filters
+        // . Filters
         if (genre) query.genre = genre;
         if (status) query.status = status;
         if (minPrice || maxPrice) {
@@ -109,42 +112,37 @@ async function run() {
             if (maxPrice) query.price.$lte = parseFloat(maxPrice);
         }
 
-        // ৩. Sorting
+        // . Sorting
         let sortOption = {};
         if (sort === 'newest') sortOption = { _id: -1 };
         else if (sort === 'price-low') sortOption = { price: 1 };
         else if (sort === 'price-high') sortOption = { price: -1 };
 
         
-        const pageInt = parseInt(page) || 1;
+const pageInt = parseInt(page) || 1;
 const limitInt = parseInt(limit) || 8;
 const skip = (pageInt - 1) * limitInt;
-
 const books = await manageCollection.find(query)
-// const books = await ebookCollection.find(query)
+
     .sort(sortOption)
     .skip(skip)
     .limit(limitInt)
     .toArray();
 
         const total = await manageCollection.countDocuments(query);
-        // const total = await ebookCollection.countDocuments(query);
-
-        res.send({ books, totalPages: Math.ceil(total / limitInt) });
+    res.send({ books, totalPages: Math.ceil(total / limitInt) });
     } catch (error) {
         res.status(500).send({ message: "Error fetching data" });
     }
 });
 
-
+// get book details page 
     app.get("/api/books/:id", async (req, res) => {
     try {
         const id = req.params.id;
         
         const query = { _id: new ObjectId(id) };
         const result = await manageCollection.findOne(query);
-        // const result = await ebookCollection.findOne(query);
-        
         if (!result) {
             return res.status(404).send({ message: "Ebook not found" });
         }
@@ -153,7 +151,21 @@ const books = await manageCollection.find(query)
         res.status(500).send({ message: "Error fetching ebook details" });
     }
 });
-
+// get 6 books featuresection homepage
+app.get("/api/featured-books", async (req, res) => {
+  try {
+    const ebooks = await manageCollection
+  .find({ status: { $regex: /^published$/i } })
+  .sort({ _id: -1 })
+  .limit(6)
+  .toArray();
+    console.log("Featured Ebooks Found:", ebooks.length);
+    res.json(ebooks);
+  } catch (err) {
+    console.error("Error in featured-books:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post("/subscription", async (req, res) => {
     const { sessionId, userId, bookId, priceId,status } = req.body;
@@ -179,25 +191,7 @@ app.post("/subscription", async (req, res) => {
     }
 });
 
-     app.get("/ebooks", async (req, res) => {
-      const { search } = req.query;
-      const query = {};
-      if (search && search != "undefined") {
-        query.$or = [
-          { title: { $regex: search, $options: "i" } },
-          { description: { $regex: search, $options: "i" } },
-        ];
-      }
-
-      const result = await ebookCollection.find(query).toArray();
-
-      res.send(result);
-    });
-
-    
-
-
-    await client.db("admin").command({ ping: 1 });
+      await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
