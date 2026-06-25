@@ -7,6 +7,7 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 dotenv.config();
 
+
 const uri = process.env.MONGODB_URI;
 const { createRemoteJWKSet, jwtVerify } = require("jose");
 const app = express();
@@ -85,15 +86,7 @@ async function run() {
         res.send(result);
      })
 
-    //  app.get("/api/all-books", async (req, res) => {
-    //     try {
-            
-    //         const result = await manageCollection.find({}).toArray(); 
-    //         res.send(result); 
-    //     } catch (error) {
-    //         res.status(500).send({ message: "Error fetching books" });
-    //     }
-    // });
+    
     app.get("/api/all-books", async (req, res) => {
     try {
         const { search, genre, minPrice, maxPrice, status, sort, page = 1, limit = 8 } = req.query;
@@ -122,25 +115,20 @@ async function run() {
         else if (sort === 'price-low') sortOption = { price: 1 };
         else if (sort === 'price-high') sortOption = { price: -1 };
 
-        // ৪. Pagination
-        // const skip = (parseInt(page) - 1) * parseInt(limit);
-
-        // const books = await manageCollection.find(query)
-        //     .sort(sortOption)
-        //     .skip(skip)
-        //     .limit(parseInt(limit))
-        //     .toArray();
+        
         const pageInt = parseInt(page) || 1;
 const limitInt = parseInt(limit) || 8;
 const skip = (pageInt - 1) * limitInt;
 
 const books = await manageCollection.find(query)
+// const books = await ebookCollection.find(query)
     .sort(sortOption)
     .skip(skip)
     .limit(limitInt)
     .toArray();
 
         const total = await manageCollection.countDocuments(query);
+        // const total = await ebookCollection.countDocuments(query);
 
         res.send({ books, totalPages: Math.ceil(total / limitInt) });
     } catch (error) {
@@ -148,30 +136,48 @@ const books = await manageCollection.find(query)
     }
 });
 
-    app.post("/subscription", async (req, res) => {
-      const { sessionId, userId, priceId } = req.body;
 
-      const isExist = await subscriptionsCollection.findOne({ sessionId });
-      if (isExist) {
-        return res.json({ msg: "Already exist!" });
-      }
-
-      await subscriptionsCollection.insertOne({
-        sessionId,
-        userId,
-        priceId,
-      });
-
-      //update user role
-      await userCollection.updateOne(
-        { _id: new ObjectId(userId) },
-        { $set: { plan: "pro" } },
-      );
-
-      res.json({ msg: "Payment successfull!" });
-    });
+    app.get("/api/books/:id", async (req, res) => {
+    try {
+        const id = req.params.id;
+        
+        const query = { _id: new ObjectId(id) };
+        const result = await manageCollection.findOne(query);
+        // const result = await ebookCollection.findOne(query);
+        
+        if (!result) {
+            return res.status(404).send({ message: "Ebook not found" });
+        }
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Error fetching ebook details" });
+    }
+});
 
 
+app.post("/subscription", async (req, res) => {
+    const { sessionId, userId, bookId, priceId,status } = req.body;
+    try {
+        console.log(req.body)
+        res.send({})
+        await subscriptionsCollection.insertOne({ sessionId,priceId, userId, bookId,status, date: new Date() });
+        
+        
+        const result=await manageCollection.updateOne(
+            { _id: new ObjectId(bookId) },
+            // { _id: bookId },
+            
+           
+            { $set: { status: "Sold" } }
+        );
+        console.log("Update result:", result);
+        
+        
+        res.status(200).send({ success: true });
+    } catch (error) {
+        res.status(500).send({ error: "Failed to update" });
+    }
+});
 
      app.get("/ebooks", async (req, res) => {
       const { search } = req.query;
@@ -188,7 +194,8 @@ const books = await manageCollection.find(query)
       res.send(result);
     });
 
- 
+    
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(
