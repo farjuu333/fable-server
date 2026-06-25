@@ -64,6 +64,7 @@ async function run() {
     const subscriptionsCollection = db.collection("subscriptions");
     const userCollection = db.collection("user");
     const manageCollection = db.collection("manage");
+    const bookmarksCollection = db.collection("bookmarks");
 
 
 
@@ -169,11 +170,11 @@ app.get("/api/featured-books", async (req, res) => {
 
 // purchase book user update status user card 
 app.post("/subscription", async (req, res) => {
-    const { sessionId, userId, bookId, priceId,status } = req.body;
+    const { sessionId, userId, bookId, priceId,status,emailFromMetadata } = req.body;
     try {
         console.log(req.body)
         res.send({})
-        await subscriptionsCollection.insertOne({ sessionId,priceId, userId, bookId,status, date: new Date() });
+        await subscriptionsCollection.insertOne({ sessionId,priceId, userId,emailFromMetadata, bookId,status, date: new Date() });
         const result=await manageCollection.updateOne(
             { _id: new ObjectId(bookId) },
            { $set: { status: "Sold" } }
@@ -189,7 +190,7 @@ app.post("/subscription", async (req, res) => {
 // user purchase data
 app.get("/api/dashboard/user/purchases", async (req, res) => {
   try {
-    const { email } = req.query;
+    const {email} = req.query;
     if (!email) return res.status(400).json({ error: "Email is required" });
 
     const user = await userCollection.findOne({ email: email });
@@ -222,6 +223,82 @@ app.get("/api/dashboard/user/purchases", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+// Bookmark API
+app.get("/api/bookmarks", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    const user = await userCollection.findOne({ email: email });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const bookmarks = await bookmarksCollection 
+      .find({ userId: user._id.toString() })
+      .toArray();
+
+    if (bookmarks.length === 0) return res.json([]);
+
+    const ebookIds = bookmarks.map(b => b.ebookId);
+
+    const bookmarkedBooks = await manageCollection
+      .find({
+        $or: [
+          { _id: { $in: ebookIds } }, 
+          { _id: { $in: ebookIds.map(id => {
+              try { return new ObjectId(id); } catch { return null; }
+          }).filter(id => id !== null) } } 
+        ]
+      })
+      .toArray();
+
+    res.json(bookmarkedBooks);
+  } catch (err) {
+    console.error("Error fetching bookmarks:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+// add book mark
+app.post("/api/bookmarks", async (req, res) => {
+  try {
+    const { email, ebookId } = req.body;
+    
+    
+    const user = await userCollection.findOne({ email: email });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    
+    const exists = await bookmarksCollection.findOne({ userId: user._id.toString(), ebookId });
+    if (exists) return res.status(400).json({ message: "Already bookmarked" });
+
+    
+    await bookmarksCollection.insertOne({ userId: user._id.toString(), ebookId, createdAt: new Date() });
+    res.status(201).json({ message: "Bookmarked successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// delete bookmark
+app.delete("/api/bookmarks", async (req, res) => {
+  try {
+    const { email, ebookId } = req.query;
+
+    const user = await userCollection.findOne({ email: email });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const result = await bookmarksCollection.findOneAndDelete({ 
+        userId: user._id.toString(), 
+        ebookId 
+    });
+
+    if (!result) return res.status(404).json({ message: "Bookmark not found" });
+    res.json({ message: "Bookmark removed" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
       await client.db("admin").command({ ping: 1 });
     console.log(
