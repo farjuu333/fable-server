@@ -173,10 +173,10 @@ app.post("/subscription", async (req, res) => {
     try {
         console.log(req.body)
         res.send({})
-        await subscriptionsCollection.insertOne({ sessionId,priceId, userId,userEmail, bookId,status, date: new Date() });
+        await subscriptionsCollection.insertOne({ sessionId,priceId, userId, bookId,status, date: new Date() });
         const result=await manageCollection.updateOne(
             { _id: new ObjectId(bookId) },
-           { $set: { status: "Sold",userEmail: userEmail } }
+           { $set: { status: "Sold" } }
         );
         console.log("Update result:", result);
         res.status(200).send({ success: true });
@@ -186,27 +186,39 @@ app.post("/subscription", async (req, res) => {
 });
 
 
-
-// User's purchased ebooks (User History)
+// user purchase data
 app.get("/api/dashboard/user/purchases", async (req, res) => {
   try {
     const { email } = req.query;
+    if (!email) return res.status(400).json({ error: "Email is required" });
 
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
-    }
+    const user = await userCollection.findOne({ email: email });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    
     const purchases = await subscriptionsCollection
-      .find({ userEmail: email }) 
+      .find({ userId: user._id.toString() })
       .toArray();
-    const bookIds = purchases.map(p => new ObjectId(p.bookId));
+
+    if (purchases.length === 0) return res.json([]);
+
+    
+    const bookIds = purchases.map(p => p.bookId);
 
     const purchasedBooks = await manageCollection
-      .find({ _id: { $in: bookIds } })
+      .find({
+        $or: [
+          { _id: { $in: bookIds } }, 
+          { _id: { $in: bookIds.map(id => {
+              try { return new ObjectId(id); } catch { return null; }
+          }).filter(id => id !== null) } } 
+        ]
+      })
       .toArray();
 
     res.json(purchasedBooks);
   } catch (err) {
-    console.error("Error fetching purchases:", err);
+    console.error("Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
