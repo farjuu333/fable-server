@@ -48,7 +48,7 @@ const verifyToken = async(req,res,next)=>{
 
   try {
     const {payload}=await jwtVerify(token,JWKS)
-  console.log (payload)
+  console.log("Payload content:", payload);
   req.user = payload;
    next()
 } catch (error) {
@@ -56,22 +56,30 @@ const verifyToken = async(req,res,next)=>{
 }
 }
 
-const authorizeAdmin = (req, res, next) => {
-  if (req.user?.role !== "admin") {
-    return res.status(403).json({ message: "Forbidden: Admins only" });
-  }
-  next();
-};
+// const authorizeAdmin = (req, res, next) => {
+//   console.log("User in authorizeAdmin:", req.user);
+//   if (req.user && req.user.role === "admin") {
+//     next();
+//   } else {
+//     return res.status(403).json({ message: "Forbidden: Admins only" });
+//   }
+// };
 
-async function run() {
-  try {
-    await client.connect();
+// async function run() {
+//   try {
+//     await client.connect();
+
+client.connect(()=>{
+  console.log('connecting to MOngo db')
+
+}).catch(console.dir)
+
     const db = client.db(process.env.AUTH_DB_NAME);
     const subscriptionsCollection = db.collection("subscriptions");
     const userCollection = db.collection("user");
     const manageCollection = db.collection("manage");
     const bookmarksCollection = db.collection("bookmarks");
-
+    const transactionsCollection = db.collection("transactions"); 
 
 
 
@@ -175,23 +183,69 @@ app.get("/api/featured-books", async (req, res) => {
 });
 
 // purchase book user update status user card 
+// app.post("/subscription", async (req, res) => {
+//     const { sessionId, userId, bookId, priceId,status,emailFromMetadata } = req.body;
+//     try {
+//         console.log(req.body)
+//         res.send({})
+//         await subscriptionsCollection.insertOne({ sessionId,priceId, userId,emailFromMetadata, bookId,status, date: new Date() });
+//         const result=await manageCollection.updateOne(
+//             { _id: new ObjectId(bookId) },
+//            { $set: { status: "Sold" } }
+//         );
+//         console.log("Update result:", result);
+//         res.status(200).send({ success: true });
+//     } catch (error) {
+//         res.status(500).send({ error: "Failed to update" });
+//     }
+// });
+
+
 app.post("/subscription", async (req, res) => {
-    const { sessionId, userId, bookId, priceId,status,emailFromMetadata } = req.body;
+    const { sessionId, userId, bookId, priceId, status, emailFromMetadata, title, amount } = req.body;
+    
     try {
-        console.log(req.body)
-        res.send({})
-        await subscriptionsCollection.insertOne({ sessionId,priceId, userId,emailFromMetadata, bookId,status, date: new Date() });
-        const result=await manageCollection.updateOne(
+        
+        const transaction = {
+            transactionId: sessionId,
+            type: "subscription",
+            userId: userId,
+            userEmail: emailFromMetadata,
+            ebook: new ObjectId(bookId),
+            ebookTitle: title || "Ebook Subscription",
+            amount: amount, 
+            createdAt: new Date()
+        };
+
+      
+        await subscriptionsCollection.insertOne({ 
+            sessionId, 
+            priceId, 
+            userId, 
+            emailFromMetadata, 
+            bookId, 
+            status, 
+            date: new Date() 
+        });
+
+        
+        await transactionsCollection.insertOne(transaction);
+
+        
+        const result = await manageCollection.updateOne(
             { _id: new ObjectId(bookId) },
-           { $set: { status: "Sold" } }
+            { $set: { status: "Sold", soldBy: emailFromMetadata } } 
         );
-        console.log("Update result:", result);
-        res.status(200).send({ success: true });
+
+        console.log("Subscription & Transaction recorded. Update result:", result);
+        
+        res.status(200).json({ success: true, message: "Subscription and transaction recorded successfully" });
+
     } catch (error) {
-        res.status(500).send({ error: "Failed to update" });
+        console.error("❌ Subscription Error:", error);
+        res.status(500).json({ error: "Failed to process subscription" });
     }
 });
-
 
 // user purchase data
 app.get("/api/dashboard/user/purchases", async (req, res) => {
@@ -360,9 +414,9 @@ app.put("/api/dashboard/users/role", async (req, res) => {
 
 
 // users for admin dashboard
-app.get("/api/dashboard/users", async (req, res) => {
+app.get("/api/dashboard/users",  async (req, res) => {
   try {
-   
+  
       const users = await userCollection.find({}).toArray();
     const safeUsers = users.map(({ password, ...user }) => ({
       _id: user._id,
@@ -378,7 +432,7 @@ app.get("/api/dashboard/users", async (req, res) => {
 });
 
 // admin delete users
-app.delete("/api/dashboard/users", async (req, res) => {
+app.delete("/api/dashboard/users",  async (req, res) => {
   try {
     const { email } = req.query;
 
@@ -421,17 +475,117 @@ app.get("/api/dashboard/stats", async (req, res) => {
 });
 
 
+// Admin: Get all ebooks (published + unpublished)
+app.get("/api/admin/books",  async (req, res) => {
+  try {
+    // Sort by _id: -1 is equivalent to createdAt: -1 for MongoDB ObjectIds
+    const ebooks = await manageCollection.find({}).sort({ _id: -1 }).toArray();
+    res.json(ebooks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-      await client.db("admin").command({ ping: 1 });
-    console.log(
+// Admin: Toggle publish/unpublish
+app.put("/api/admin/books/:id/toggle-status",  async (req, res) => {
+  try {
+    const id = req.params.id;
+    const ebook = await manageCollection.findOne({ _id: new ObjectId(id) });
+    
+    if (!ebook) return res.status(404).json({ error: "Not found" });
+
+    const newStatus = ebook.status === "published" ? "unpublished" : "published";
+    
+    await manageCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: newStatus } }
+    );
+    
+    res.json({ ...ebook, status: newStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Delete ebook
+app.delete("/api/admin/books/:id",  async (req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await manageCollection.deleteOne({ _id: new ObjectId(id) });
+    
+    if (result.deletedCount === 0) return res.status(404).json({ error: "Not found" });
+    
+    res.json({ message: "Ebook deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// complete purchase
+app.post("/api/complete-purchase", async (req, res) => {
+      try {
+        const { session_id } = req.body;
+        if (!session_id) return res.status(400).json({ error: "No session_id provided" });
+
+        const session = await stripe.checkout.sessions.retrieve(session_id);
+        const bookId = session.metadata?.bookId;
+        const email = session.metadata?.userEmail || session.customer_details?.email || "unknown@email.com";
+        const amount = session.amount_total / 100;
+        const title = session.metadata?.title || "Ebook";
+
+        if (!bookId) return res.status(400).json({ error: "No ebookId in metadata" });
+
+        // Ebook update
+        await manageCollection.updateOne(
+          { _id: new ObjectId(ebookId) },
+          { $set: { sold: true, userEmail: email, status: "Sold" } }
+        );
+
+        // Transaction save
+        const transaction = {
+          transactionId: session.id,
+          type: "purchase",
+          userEmail: email,
+          ebook: new ObjectId(bookId),
+          ebookTitle: title,
+          amount: amount,
+          createdAt: new Date()
+        };
+        await transactionsCollection.insertOne(transaction);
+
+        res.json({ success: true, message: "Purchase completed" });
+      } catch (err) {
+        console.error("❌ Complete Purchase Error:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // 2. Get All Transactions (Admin)
+    app.get("/api/dashboard/transactions",  async (req, res) => {
+      try {
+        const transactions = await transactionsCollection.find({})
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .toArray();
+        res.json(transactions);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+
+
+      // await client.db("admin").command({ ping: 1 });
+     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
-  } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
-  }
-}
-run().catch(console.dir);
+//   } finally {
+//     // Ensures that the client will close when you finish/error
+//     // await client.close();
+//   }
+// }
+// run().catch(console.dir);
 
 app.get("/", (req, res) => {
   res.send("Server is running fine!");
@@ -440,3 +594,4 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+module.exports=app;
