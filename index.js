@@ -49,13 +49,19 @@ const verifyToken = async(req,res,next)=>{
   try {
     const {payload}=await jwtVerify(token,JWKS)
   console.log (payload)
+  req.user = payload;
    next()
 } catch (error) {
   return res.status(403).json({message:"Forbidden"});
 }
-
-
 }
+
+const authorizeAdmin = (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ message: "Forbidden: Admins only" });
+  }
+  next();
+};
 
 async function run() {
   try {
@@ -294,7 +300,7 @@ app.delete("/api/bookmarks", async (req, res) => {
   }
 });
 
-// Writer's sales history
+// Writer's sales history-
 app.get("/api/dashboard/writer/sales", async (req, res) => {
   try {
     const { writerEmail } = req.query; 
@@ -323,6 +329,33 @@ app.get("/api/dashboard/writer/sales", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+// user role and logic admin
+app.put("/api/dashboard/users/role", async (req, res) => {
+  try {
+    const session = await auth.api.getSession({ headers: req.headers });
+    
+    if (!session || session.user?.role !== "admin") {
+      return res.status(403).json({ error: "Unauthorized access: Admins only" });
+    }
+    const { email, role } = req.body;
+    const db = client.db(process.env.AUTH_DB_NAME);
+    const result = await db.collection("user").updateOne(
+      { email }, 
+      { $set: { role } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ message: "Role updated successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 
 
