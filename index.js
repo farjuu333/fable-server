@@ -195,17 +195,12 @@ app.get("/api/dashboard/user/purchases", async (req, res) => {
 
     const user = await userCollection.findOne({ email: email });
     if (!user) return res.status(404).json({ error: "User not found" });
-
-    
     const purchases = await subscriptionsCollection
       .find({ userId: user._id.toString() })
       .toArray();
 
     if (purchases.length === 0) return res.json([]);
-
-    
     const bookIds = purchases.map(p => p.bookId);
-
     const purchasedBooks = await manageCollection
       .find({
         $or: [
@@ -298,6 +293,37 @@ app.delete("/api/bookmarks", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Writer's sales history
+app.get("/api/dashboard/writer/sales", async (req, res) => {
+  try {
+    const { writerEmail } = req.query; 
+    if (!writerEmail) return res.status(400).json({ error: "Writer email is required" });
+
+    
+    const writerBooks = await manageCollection
+      .find({ writerEmail: writerEmail }) 
+      .toArray();
+
+    if (writerBooks.length === 0) return res.json([]);
+
+    const bookIds = writerBooks.map(book => book._id.toString());
+
+    
+    const sales = await subscriptionsCollection
+      .find({ 
+        bookId: { $in: bookIds },
+        status: "Sold"
+      })
+      .toArray();
+
+    res.json(sales);
+  } catch (err) {
+    console.error("Error fetching sales:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 
       await client.db("admin").command({ ping: 1 });
