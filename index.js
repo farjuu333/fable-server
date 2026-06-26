@@ -11,7 +11,7 @@ dotenv.config();
 const uri = process.env.MONGODB_URI;
 const { createRemoteJWKSet, jwtVerify } = require("jose");
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 
 app.use(
   cors({
@@ -65,14 +65,14 @@ const verifyToken = async(req,res,next)=>{
 //   }
 // };
 
-// async function run() {
-//   try {
-//     await client.connect();
+async function run() {
+  try {
+    await client.connect();
 
-client.connect(()=>{
-  console.log('connecting to MOngo db')
+// client.connect(()=>{
+//   console.log('connecting to MOngo db')
 
-}).catch(console.dir)
+// }).catch(console.dir)
 
     const db = client.db(process.env.AUTH_DB_NAME);
     const subscriptionsCollection = db.collection("subscriptions");
@@ -580,12 +580,12 @@ app.post("/api/complete-purchase", async (req, res) => {
      console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
-//   } finally {
-//     // Ensures that the client will close when you finish/error
-//     // await client.close();
-//   }
-// }
-// run().catch(console.dir);
+  } finally {
+    // Ensures that the client will close when you finish/error
+    // await client.close();
+  }
+}
+run().catch(console.dir);
 
 app.get("/", (req, res) => {
   res.send("Server is running fine!");
