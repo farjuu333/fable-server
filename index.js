@@ -359,6 +359,25 @@ app.put("/api/dashboard/users/role", async (req, res) => {
 
 
 
+// users for admin dashboard
+app.get("/api/dashboard/users", async (req, res) => {
+  try {
+   
+      const users = await userCollection.find({}).toArray();
+      const safeUsers = users.map((user) => {
+      const { password, ...safeUser } = user;
+      return safeUser;
+    });
+
+    res.json(safeUsers);
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+
+
       await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
