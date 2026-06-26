@@ -364,15 +364,59 @@ app.get("/api/dashboard/users", async (req, res) => {
   try {
    
       const users = await userCollection.find({}).toArray();
-      const safeUsers = users.map((user) => {
-      const { password, ...safeUser } = user;
-      return safeUser;
-    });
-
-    res.json(safeUsers);
+    const safeUsers = users.map(({ password, ...user }) => ({
+      _id: user._id,
+      name: user.name,
+      email: user.email, 
+      role: user.role
+    }));
+  res.json(safeUsers);
   } catch (err) {
     console.error("Error fetching users:", err);
     res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// admin delete users
+app.delete("/api/dashboard/users", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    const result = await userCollection.deleteOne({ email: email });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Get Dashboard Stats 
+app.get("/api/dashboard/stats", async (req, res) => {
+  try {
+    const totalEbooks = await manageCollection.countDocuments({ status: "published" });
+    const totalSold = await manageCollection.countDocuments({ status: "Sold" });
+    const revenue = await manageCollection.aggregate([
+      { $match: { status: "Sold" } },
+      { $group: { _id: null, total: { $sum: "$price" } } }
+    ]).toArray();
+
+    res.json({
+      totalEbooks,
+      totalSold,
+      totalRevenue: revenue[0]?.total || 0,
+    });
+  } catch (err) {
+    console.error("Error fetching stats:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
